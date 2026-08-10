@@ -1,0 +1,496 @@
+import os
+import numpy as np
+from copy import deepcopy
+from MechanismParser import Parser
+
+###############################################################################
+# MechManipulator2_0.py  –  Upgraded Arrhenius Manipulator
+#
+# Supported design modes (detected automatically from unsrt + select_vector):
+#
+#   ┌──────────────────┬───────────┬───────────────────────────────────────┐
+#   │ Mode             │ n_params  │ Perturbation formula                  │
+#   ├──────────────────┼───────────┼───────────────────────────────────────┤
+#   │ Full A-factor    │     1     │ p[0] = p0[0] + σ_A · ζ_A             │
+#   │ Full A1+B1+C1    │     3     │ p    = p0   + L · ζ        (3×3 L)   │
+#   │ Partial A-factor │     1     │ p[0] = p0[0] + σ_A · ζ_A · sel[0]   │
+#   │ Partial A1+B1+C1 │     3     │ p_S  = p0_S + L_r · ζ_r   (m×m L_r) │
+#   └──────────────────┴───────────┴───────────────────────────────────────┘
+#
+# For Partial A1+B1+C1, L_r is the Cholesky factor of the principal submatrix
+# Σ_r = Σ[I,I] where I = active_indices.  This is mathematically correct;
+# applying the full L to a sparse ζ (zeros at inactive positions) is NOT
+# equivalent due to cross-correlation terms.
+###############################################################################
+
+
+class Manipulator:
+	def __init__(self, copy_of_mech, unsrt_object, perturbation,
+	             selection=np.array([])):
+		"""
+		Parameters
+		----------
+		copy_of_mech  : dict   Parsed YAML mechanism (deepcopy is taken internally).
+		unsrt_object  : dict   {rxn_key → UncertaintyExtractor subclass instance}.
+		perturbation  : list   Flat design-matrix row (full-space, zeros at inactive
+		                       positions for partial PRS).
+		selection     : array  Flat selection row from the design matrix
+		                       (1 = active, 0 = inactive).  If empty, defaults to
+		                       all-ones (full PRS / backward-compatible behaviour).
+		"""
+		self.mechanism  = deepcopy(copy_of_mech)
+		self.unsrt      = unsrt_object
+		self.perturbation = perturbation
+		self.rxn_list   = [rxn for rxn in self.unsrt]
+
+		if len(selection) != 0:
+			self.Arrhenius_Params_Selection = "some"
+			self.selection = selection
+		else:
+			self.Arrhenius_Params_Selection = "some"
+			self.selection = np.ones(len(perturbation))
+
+		# Initialised here; populated by getRxnPerturbationDict()
+		self.select_dict = {}
+
+	# ═════════════════════════════════════════════════════════════════════════
+	# Helpers
+	# ═════════════════════════════════════════════════════════════════════════
+
+	def getRxnPerturbationDict(self):
+		"""
+		Split the perturbation and selection vectors into per-reaction dicts.
+
+		Handles two formats, auto-detected by len(perturbation):
+
+		Full-space format  (full PRS / A1+B1+C1, original behaviour)
+		─────────────────────────────────────────────────────────────
+		  len(perturbation) == sum(activeParameters per rxn)  (e.g. 3*N_rxns)
+		  perturbation and selection are consumed sequentially,
+		  n = len(activeParameters) elements per reaction.
+
+		Compressed-diagonal format  (SA mode, one value per reaction)
+		──────────────────────────────────────────────────────────────
+		  len(perturbation) == N_rxns
+		  selection has exactly 3 entries per reaction (pSelectionMatrix layout,
+		  length 3*N_rxns).
+		  For reaction j:
+		    sel_3 = selection[3j : 3j+3]  — which Arrhenius param is active
+		    [1,0,0] → A-factor   [0,1,0] → n   [0,0,1] → Ea/R
+		    [0,0,0] → inactive   → beta = zeros → _compute returns nominal
+		  perturbation[j] is the single zeta scalar placed at the active position.
+
+		Returns
+		-------
+		perturb     : dict  rxn → np.ndarray  zeta vector (length n_params)
+		select_dict : dict  rxn → np.ndarray  selection flags (length n_params)
+		"""
+		perturb     = {}
+		select_dict = {}
+		N_rxns = len(self.rxn_list)
+
+		# Bug 17 (AMMONIA_CAMPAIGN_2026-07-22.md, bug.md): both branches below
+		# read self.selection with a HARDCODED stride of 3 per reaction,
+		# regardless of each reaction's actual n = len(activeParameters) (1 or
+		# 3) -- unlike the MUQ-SAC sibling, which walks with a dynamic
+		# n-per-reaction cursor and sanity-checks the total consumed against
+		# len(self.selection). Under correlation-based active-set reduction
+		# (the actively-evolving partial-PRS "2_0" path), self.selection can
+		# arrive narrower than this fixed-stride-3 assumption expects -- the
+		# MUQ-SAC sibling raises a clear ValueError in that case; THIS copy
+		# used to silently read past/short of the real data instead (worse:
+		# wrong statistics with no error at all, not just a crash). Loudly
+		# reject a length mismatch up front rather than attempt to redesign
+		# the indexing for a selection-array format this fix does not have
+		# enough context to characterize safely (see the dedicated bug.md
+		# note for the full investigation and why a deeper fix was
+		# deliberately not attempted here).
+		expected_selection_len = 3 * N_rxns
+		if len(self.selection) != expected_selection_len:
+			raise ValueError(
+				f"getRxnPerturbationDict: self.selection has "
+				f"{len(self.selection)} entries but this copy's fixed "
+				f"3-per-reaction stride expects {expected_selection_len} "
+				f"({N_rxns} reactions x 3). Check that self.selection's "
+				f"layout matches the pSelectionMatrix convention (3 flags "
+				f"per reaction, always) -- a narrower array (e.g. from "
+				f"correlation-based active-set reduction) would otherwise "
+				f"be silently misread instead of raising here."
+			)
+
+		if len(self.perturbation) == N_rxns:
+			# ── Compressed-diagonal format ─────────────────────────────────────
+			for j, rxn in enumerate(self.rxn_list):
+				n = len(self.unsrt[rxn].activeParameters)   # 1 or 3
+
+				# 3 selection flags for this reaction from pSelectionMatrix
+				sel_3 = np.asarray(self.selection[3*j : 3*j + 3], dtype=float)
+				sel_n = sel_3[:n]   # trimmed to n for _compute_perturbed_params
+
+				m = int(np.sum(sel_3 != 0.0))   # number of active params (0 or 1 for SA)
+				if m == 0:
+					# Inactive: zero beta + zero selection → _compute returns nominal
+					perturb[rxn]     = np.zeros(n)
+					select_dict[rxn] = np.zeros(n)
+				else:
+					# Active: place the single diagonal zeta at the selected position
+					beta_val  = float(self.perturbation[j])
+					beta_full = np.zeros(n)
+					for k in range(min(n, 3)):
+						if sel_3[k] != 0.0:
+							beta_full[k] = beta_val
+					perturb[rxn]     = beta_full
+					select_dict[rxn] = sel_n
+
+		else:
+			# ── Full-space format ──────────────────────────────────────────────
+			#
+			# Two vectors with DIFFERENT strides must use SEPARATE cursors:
+			#
+			#   self.perturbation  (pDesignMatrix row)
+			#       Stride = n_active per reaction (variable: 0, 1, 2, or 3).
+			#       dm_count advances by the number of 1s in sel_3.
+			#
+			#   self.selection  (pSelectionMatrix row)
+			#       Stride = 3 per reaction, always fixed.
+			#       sel_count advances by 3 regardless of n_active.
+			#
+			# Using a single counter for both causes the selection cursor to
+			# drift after any reaction where n_active ≠ len(activeParameters),
+			# reading pSelectionMatrix flags from wrong positions and
+			# producing wrong active_indices → wrong parameters perturbed.
+			#
+			# beta_full is built in FULL SPACE (always 3 elements):
+			#   inactive positions → 0.0
+			#   active positions   → the corresponding DM value
+			# This guarantees that beta_arr[list(active_indices)] in
+			# _compute_perturbed_params (Mode 4) works correctly for any
+			# subset of {0, 1, 2}, including n-only (active_indices=(1,))
+			# and A+Ea (active_indices=(0, 2)) which would raise IndexError
+			# if beta_arr were compressed to n_active elements.
+			dm_count  = 0   # cursor into self.perturbation  (advances by n_active)
+			sel_count = 0   # cursor into self.selection     (always advances by 3)
+
+			for rxn in self.rxn_list:
+				# Read exactly 3 selection flags for this reaction
+				sel_3    = np.asarray(
+				    self.selection[sel_count : sel_count + 3], dtype=float)
+				n_active = int(np.sum(sel_3 != 0.0))
+
+				# Extract the n_active DM values and place them at their
+				# global parameter positions (0=lnA, 1=n, 2=Ea/R) in a
+				# full-space 3-element beta vector.
+				dm_vals   = np.asarray(
+				    self.perturbation[dm_count : dm_count + n_active],
+				    dtype=float)
+				beta_full = np.zeros(3)
+				k = 0
+				for param_i in range(3):
+					if sel_3[param_i] != 0.0:
+						beta_full[param_i] = dm_vals[k]
+						k += 1
+
+				perturb[rxn]     = beta_full
+				select_dict[rxn] = sel_3
+
+				sel_count += 3          # pSelectionMatrix: fixed stride
+				dm_count  += n_active   # pDesignMatrix:    variable stride
+
+		return perturb, select_dict
+
+	def del_mech(self):
+		del self.mechanism
+
+	def getRxnType(self):
+		return {rxn: self.unsrt[rxn].classification for rxn in self.rxn_list}
+
+	# ═════════════════════════════════════════════════════════════════════════
+	# Core perturbation kernel  (all four modes handled here)
+	# ═════════════════════════════════════════════════════════════════════════
+
+	def _compute_perturbed_params(self, rxn, beta, select_vector=None):
+		"""
+		Compute the perturbed Arrhenius parameter vector p = [ln A, n, Ea/R].
+
+		Mode is inferred automatically:
+
+		  n_params = 1  →  A-factor only (factor perturbation type)
+		  n_params = 3
+		    len(active_indices) = 3  →  Full A1+B1+C1
+		    len(active_indices) < 3  →  Partial A1+B1+C1  (reduced L_r)
+		    len(active_indices) = 0  →  No perturbation   (return nominal)
+
+		Parameters
+		----------
+		rxn           : str   Reaction key in self.unsrt.
+		beta          : array Per-reaction zeta vector from the design matrix.
+		                      Full-space (length = n_active_params of reaction);
+		                      zeros occupy inactive positions for partial PRS.
+		select_vector : array 1/0 flags, one per active parameter of this reaction.
+		                      Derived from the design-matrix selection row.
+		                      If None, falls back to self.unsrt[rxn].selection
+		                      (backward-compatible: uses the reaction's own
+		                      perturbation-type selection, not partial PRS).
+
+		Returns
+		-------
+		p : np.ndarray, shape (3,)
+		    Perturbed [ln A, n, Ea/R].  Unperturbed parameters keep nominal values.
+
+		Notes
+		-----
+		Partial A1+B1+C1 uses UncertaintyExtractor.get_reduced_cholesky(indices),
+		which computes  Σ_r = Σ[I,I]  (principal submatrix)  then  L_r = chol(Σ_r).
+		This is the only mathematically correct path; L_full · beta_sparse is wrong.
+		"""
+		p0       = np.asarray(self.unsrt[rxn].nominal, dtype=float)
+		cov      = self.unsrt[rxn].cholskyDeCorrelateMat
+		n_params = len(self.unsrt[rxn].activeParameters)
+
+		# Resolve selection vector ────────────────────────────────────────────
+		if select_vector is None:
+			# Backward-compatible default: use the reaction's own selection attr.
+			# For factor-type: [1,0,0]; for all-param type: [1,1,1].
+			sel = np.asarray(self.unsrt[rxn].selection, dtype=float)
+			# Trim to n_params entries (factor type has [1,0,0] but n_params=1)
+			sel = sel[:n_params]
+		else:
+			sel = np.asarray(select_vector, dtype=float)[:n_params]
+
+		beta_arr = np.asarray(beta, dtype=float)
+
+		# ── Mode 1 & 3: A-factor only  (n_params = 1) ───────────────────────
+		# This covers both "Full A-factor" and "Partial A-factor" reactions.
+		# cov is a 1-element array [σ_A] (the scalar Cholesky factor for ln A).
+		if n_params == 1:
+			sigma_A = float(cov[0]) if hasattr(cov, '__len__') else float(cov)
+			active  = float(sel[0]) if len(sel) > 0 else 1.0
+			p       = p0.copy()
+			p[0]   += sigma_A * float(beta_arr[0]) * active
+			return p
+
+		# ── Three-parameter cases  (n_params = 3) ────────────────────────────
+		# Determine which of the three Arrhenius parameters are active.
+		# active_indices maps into p0-space (0=lnA, 1=n, 2=Ea/R).
+		active_indices = tuple(
+			i for i in range(3) if i < len(sel) and float(sel[i]) != 0.0
+		)
+
+		if not active_indices:
+			# Nothing selected for this reaction — return nominal unchanged.
+			return p0.copy()
+
+		if len(active_indices) == 3:
+			# ── Mode 2: Full A1+B1+C1 ─────────────────────────────────────
+			# Use the full 3×3 L matrix (identical to original MUQ-SAC formula).
+			#   p = p0 + L · ζ
+			p = p0 + np.asarray(cov.dot(beta_arr)).flatten()
+
+		else:
+			# ── Mode 4: Partial A1+B1+C1 ─────────────────────────────────
+			# Build reduced Cholesky from the principal submatrix of Σ = L L^T.
+			# get_reduced_cholesky(indices) → (Σ_r, L_r)
+			# where Σ_r = Σ[active_indices, active_indices], L_r = chol(Σ_r).
+			#
+			# beta_arr is FULL-SPACE (3 elements, zeros at inactive positions,
+			# DM values at global positions 0/1/2 for A/n/Ea).
+			# Guaranteed by the fixed getRxnPerturbationDict above.
+			#
+			# beta_arr[list(active_indices)] correctly extracts the active
+			# zeta values regardless of which subset {0,1,2} is active
+			# (n-only: active_indices=(1,) → beta_arr[[1]] ✓;
+			#  A+Ea:   active_indices=(0,2) → beta_arr[[0,2]] ✓).
+			#
+			#   ζ_r = beta_arr[active_indices]   (m active zeta values)
+			#   Δp_r = L_r · ζ_r                (m-vector)
+			#   p[active_indices] += Δp_r
+			_, L_r  = self.unsrt[rxn].get_reduced_cholesky(active_indices)
+			zeta_r  = beta_arr[list(active_indices)]
+			delta_r = L_r @ zeta_r
+			p       = p0.copy()
+			for local_i, global_i in enumerate(active_indices):
+				p[global_i] = p0[global_i] + delta_r[local_i]
+
+		#print(f"Rxn: {rxn}",f"Active parameters: {len(active_indices)}",f"selected params:{select_vector}",f"Nominal:{p0}",f"Perturbed: {p}\n\n")
+		return p
+
+	def _write_rate_constant(self, p, reaction_details):
+		"""
+		Write the perturbed Arrhenius parameters into a rate-constant dict.
+
+		Parameters
+		----------
+		p                : array  [ln A, n, Ea/R]
+		reaction_details : dict   YAML rate-constant entry (mutated in place).
+		"""
+		reaction_details["A"]  = float(np.exp(p[0]))
+		reaction_details["b"]  = float(p[1])
+		reaction_details["Ea"] = float(p[2] * 1.987)
+
+	# ═════════════════════════════════════════════════════════════════════════
+	# Reaction-type perturbation methods
+	# ═════════════════════════════════════════════════════════════════════════
+
+	def ElementaryPerturbation(self, rxn, beta, mechanism, select_vector=None):
+		"""
+		Perturb an elementary, duplicate, or third-body reaction.
+
+		Calls _compute_perturbed_params which transparently handles all four
+		design modes.  select_vector is the per-reaction row from the design
+		matrix selection (1 = active, 0 = inactive).  When omitted the
+		reaction's own .selection attribute is used (backward compatible).
+		"""
+		p     = self._compute_perturbed_params(rxn, beta, select_vector)
+		index = self.unsrt[rxn].index
+
+		reaction_details = mechanism["reactions"][index]["rate-constant"]
+		self._write_rate_constant(p, reaction_details)
+		mechanism["reactions"][index]["rate-constant"] = deepcopy(reaction_details)
+		return mechanism
+
+	def PlogPerturbation(self, rxn, beta, mechanism, select_vector=None):
+		"""
+		Perturb a PLOG or PLOG-Duplicate pressure-dependent reaction.
+
+		The pressure level (High / Low / interpolated) is determined from
+		self.unsrt[rxn].pressure_limit as in the original code.
+		"""
+		p = self._compute_perturbed_params(rxn, beta, select_vector)
+
+		# Determine PLOG pressure index ───────────────────────────────────────
+		rxn_split_index = None
+		if "PLOG" in rxn:
+			try:
+				rxn_split_index = int(rxn.split(":")[1].split("_")[1])
+			except (IndexError, ValueError):
+				rxn_split_index = 0
+
+		index          = self.unsrt[rxn].index
+		pressure_limit = self.unsrt[rxn].pressure_limit
+
+		if pressure_limit == "High":
+			pressure_index = -1
+		elif pressure_limit == "Low":
+			pressure_index = 0
+		else:
+			pressure_index = rxn_split_index if rxn_split_index is not None else 0
+
+		reaction_details = mechanism["reactions"][index]["rate-constants"][pressure_index]
+		self._write_rate_constant(p, reaction_details)
+		mechanism["reactions"][index]["rate-constants"][pressure_index] = deepcopy(
+		    reaction_details)
+		return mechanism
+
+	def BranchingReactions(self, rxn, beta, mechanism, select_vector=None):
+		"""
+		Perturb all branches of a branching reaction with the same zeta.
+
+		The perturbation delta [Δ(ln A), Δn, Δ(Ea/R)] is computed from the
+		base reaction's nominal.  The same delta is applied to each branch's
+		own nominal so that all branches receive an identical relative shift
+		regardless of their individual nominal values.
+
+		This correctly supports all four design modes because the delta is
+		computed by _compute_perturbed_params (which handles Full / Partial
+		A-factor and Full / Partial A1+B1+C1).
+		"""
+		p0_base = np.asarray(self.unsrt[rxn].nominal, dtype=float)
+		p_base  = self._compute_perturbed_params(rxn, beta, select_vector)
+		delta   = p_base - p0_base        # [Δ(lnA), Δn, Δ(Ea/R)]
+
+		# Collect base reaction index + all branch indices ─────────────────────
+		indexes = [self.unsrt[rxn].index]
+		indexes.extend(self.unsrt[rxn].branches)
+
+		for index in indexes:
+			reaction_details = mechanism["reactions"][index]["rate-constant"]
+			# Each branch has its own nominal; apply the shared delta to it.
+			p0_branch = np.array([
+			    float(np.log(reaction_details["A"])),
+			    float(reaction_details["b"]),
+			    float(reaction_details["Ea"] / 1.987),
+			])
+			p_branch = p0_branch + delta
+			self._write_rate_constant(p_branch, reaction_details)
+			mechanism["reactions"][index]["rate-constant"] = deepcopy(reaction_details)
+
+		return mechanism
+
+	def ThirdBodyPerturbation(self, rxn, beta, mechanism, select_vector=None):
+		"""Third-body efficiency perturbation (not yet implemented)."""
+		pass
+
+	def TroePerturbation(self, rxn, beta, mechanism, select_vector=None):
+		"""
+		Perturb a Troe / falloff reaction.
+
+		The high-pressure or low-pressure Arrhenius block is selected via
+		self.unsrt[rxn].pressure_limit, matching the original behaviour.
+		All four design modes are supported through _compute_perturbed_params.
+		"""
+		p       = self._compute_perturbed_params(rxn, beta, select_vector)
+		P_limit = self.unsrt[rxn].pressure_limit
+		index   = self.unsrt[rxn].index
+
+		if P_limit == "High":
+			reaction_details = mechanism["reactions"][index]["high-P-rate-constant"]
+			self._write_rate_constant(p, reaction_details)
+			mechanism["reactions"][index]["high-P-rate-constant"] = deepcopy(
+			    reaction_details)
+		else:
+			reaction_details = mechanism["reactions"][index]["low-P-rate-constant"]
+			self._write_rate_constant(p, reaction_details)
+			mechanism["reactions"][index]["low-P-rate-constant"] = deepcopy(
+			    reaction_details)
+
+		return mechanism
+
+	# ═════════════════════════════════════════════════════════════════════════
+	# Main driver
+	# ═════════════════════════════════════════════════════════════════════════
+
+	def doPerturbation(self):
+		"""
+		Apply Arrhenius perturbations to every reaction in the mechanism.
+
+		Builds the per-reaction beta and select_vector from the flat design
+		matrix row and selection row stored in self.perturbation / self.selection,
+		then dispatches to the appropriate perturbation method based on reaction
+		classification.
+
+		Returns
+		-------
+		mechanism : dict   The perturbed YAML mechanism.
+		perturb   : dict   Per-reaction zeta vectors {rxn → np.ndarray}.
+		"""
+		rxn_type              = self.getRxnType()
+		perturb, self.select_dict = self.getRxnPerturbationDict()
+		mechanism             = self.mechanism
+
+		for rxn in self.rxn_list:
+			beta        = np.asarray(perturb[rxn])
+			sel         = self.select_dict[rxn]   # per-reaction selection flags
+			type_of_rxn = rxn_type[rxn]
+
+			if type_of_rxn == "Elementary":
+				mechanism = self.ElementaryPerturbation(rxn, beta, mechanism, sel)
+
+			elif type_of_rxn == "PLOG":
+				mechanism = self.PlogPerturbation(rxn, beta, mechanism, sel)
+
+			elif type_of_rxn == "PLOG-Duplicate":
+				mechanism = self.PlogPerturbation(rxn, beta, mechanism, sel)
+
+			elif type_of_rxn == "Duplicate":
+				mechanism = self.ElementaryPerturbation(rxn, beta, mechanism, sel)
+
+			elif type_of_rxn == "Falloff":
+				mechanism = self.TroePerturbation(rxn, beta, mechanism, sel)
+
+			elif type_of_rxn == "ThirdBody":
+				mechanism = self.ElementaryPerturbation(rxn, beta, mechanism, sel)
+
+			elif type_of_rxn == "BranchingRxn":
+				mechanism = self.BranchingReactions(rxn, beta, mechanism, sel)
+
+		return mechanism, perturb

@@ -1,0 +1,9 @@
+{
+  "id": "reaction-network",
+  "name": "Procedural reaction-network graph",
+  "author": "generated",
+  "source": "scripts/generate_wallpapers.py (procedural, no external asset)",
+  "license": "CC0-1.0 (originated by this repo; no third-party rights involved)",
+  "dominant_luminance": 0.138,
+  "recommended_scrim_alpha": 0.5
+}

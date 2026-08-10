@@ -1,0 +1,20 @@
+version: 2
+
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.9"
+  jobs:
+    # PySide6 (needed by autodoc to import mso_studio.gui.*) has no display
+    # in the RTD build environment -- QT_QPA_PLATFORM=offscreen (also set in
+    # conf.py, redundant here as a build-environment-level guarantee) avoids
+    # any dependency on a real X server.
+    pre_build:
+      - export QT_QPA_PLATFORM=offscreen
+
+sphinx:
+  configuration: docs/conf.py
+
+python:
+  install:
+    - requirements: docs/requirements.txt

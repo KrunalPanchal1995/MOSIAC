@@ -1,0 +1,1 @@
+{"solver": "SCS", "statuses": ["optimal", "optimal", "optimal", "optimal", "optimal"], "consistency_measure": 1.000000000275655, "consistent": true, "parameter_bounds": {"0": [-0.2999998367182509, 0.500000196910194], "1": [6.317667124370423e-10, 0.4000040626220631]}, "predictions": []}

@@ -1,0 +1,260 @@
+##==============================================================================
+#  RMIP + MUQ-SAC  Unified Project Configuration
+#  Project: My_Study
+#  Usage:
+#    python src/MUQ-SAC/run_script.py        target.opt
+#    python src/Sensitivity_Analysis/sens.py target.opt
+#    python graph_sa_run.py                  target.opt
+#    python forward_uq.py                    target.opt
+#    python rmip_cli.py <cmd> --config       target.opt
+##==============================================================================
+
+# ──────────────────────────────────────────────────────────────────────────
+# PROJECT METADATA
+# ──────────────────────────────────────────────────────────────────────────
+project:
+  name: My_Study
+  fuel_name: H2
+  fuel_formula: H2
+  output_base_dir: outputs/My_Study
+
+# ──────────────────────────────────────────────────────────────────────────
+# SECTION 1 — MUQ-SAC Optimization Type
+# ──────────────────────────────────────────────────────────────────────────
+Type:
+  optimization_type: PRS
+  Algorithm_type: gradient-based
+  Algorithm: SLSQP
+
+# ──────────────────────────────────────────────────────────────────────────
+# Resource counts
+# ──────────────────────────────────────────────────────────────────────────
+Counts:
+  total_reactions: 10
+  parallel_threads: 100
+  targets_count: 100
+
+# ──────────────────────────────────────────────────────────────────────────
+# Sensitivity analysis metadata
+# ──────────────────────────────────────────────────────────────────────────
+SA:
+  carbon_number: 0
+
+# ──────────────────────────────────────────────────────────────────────────
+# Tool binary / executable locations
+# ──────────────────────────────────────────────────────────────────────────
+Bin:
+  bin: /home/krithika/MUQ-SAC/V3.0
+  solver_bin: /home/krithika/FlameMaster/Bin/bin
+  yaml_writer: /data/MECHANISM_OPTIMIZATION_SUITE/src/MUQ-SAC/parallel_yaml_writer.so
+  samap_executable: PLACEHOLDER_SAMAP
+  jpdap_executable: PLACEHOLDER_JPDAP
+  SA_tool: /data/MECHANISM_OPTIMIZATION_SUITE/src/Sensitivity_Analysis/sens.py
+  SA_tool_3p: /data/MECHANISM_OPTIMIZATION_SUITE/src/Sensitivity_Analysis/sens_3_params.py
+
+# ──────────────────────────────────────────────────────────────────────────
+# Kinetics file format and fuel definition
+# ──────────────────────────────────────────────────────────────────────────
+Inputs:
+  fileType: chemkin
+  fuelClass: Mono
+  fuel:
+    a: H2
+  global_reaction: 2H2+O2==2H2O
+  AnalysisType: reaction
+  fuel_coeffs: {}
+  fuel_mw: {}
+  fuel_nu_o2: {}
+
+# ──────────────────────────────────────────────────────────────────────────
+# Input file locations for MUQ-SAC pipeline
+# ──────────────────────────────────────────────────────────────────────────
+Locations:
+  mechanism: PLACEHOLDER_MECHANISM.yaml
+  Initial_pre_file: PLACEHOLDER.PRE
+  uncertainty_data: PLACEHOLDER_uncertainty.xml
+  thermo_file: PLACEHOLDER_thermo.dat
+  trans_file: PLACEHOLDER_trans.dat
+  targets: PLACEHOLDER.target
+  addendum: /data/MECHANISM_OPTIMIZATION_SUITE/xml_output/addundem.add
+
+# ──────────────────────────────────────────────────────────────────────────
+# Flame speed start profiles (only needed for LFS targets)
+# ──────────────────────────────────────────────────────────────────────────
+StartProfilesData:
+  Fls:
+    Flame: UnstretchedPremixed
+    StartProfilesFile: PLACEHOLDER_FLS_INIT
+    CopyTo: PLACEHOLDER_FLS_DEST
+    fuel:
+      key: Mono
+      From: H2
+    oxidizer:
+      key: Mono
+      From: O2
+    bathGas:
+      key: Mono
+      From: N2
+    globalReaction:
+      FromRxn: 2H2+O2==2H2O
+    units:
+      pressure: Pa
+      temperature: K
+      concentration: mol_fraction
+  Flf:
+    Flame: UnstretchedPremixed
+    StartProfilesFile: PLACEHOLDER_FLF_INIT
+    CopyTo: PLACEHOLDER_FLF_DEST
+    fuel:
+      key: Mono
+      From: H2
+    oxidizer:
+      key: Mono
+      From: O2
+    bathGas:
+      key: Mono
+      From: N2
+    globalReaction:
+      FromRxn: 2H2+O2==2H2O
+    units:
+      pressure: Pa
+      temperature: K
+      concentration: mol_fraction
+
+# ──────────────────────────────────────────────────────────────────────────
+# Statistical / PRS settings
+# ──────────────────────────────────────────────────────────────────────────
+Stats:
+  Design_of_PRS: A-facto
+  Order_of_PRS: 2
+  Sampling_of_PRS: 4
+  PRS_type: Partial
+  cut_off_percentage: 1.0
+  MRE_criteria: 5.0
+  Objective: powerMeanWMRE
+  pm_p: 0.1
+  pm_anneal: true
+  pm_p_start: 1.0
+  omh_target_decade: 1.0
+  pen_alpha: 0.9
+  pen_K: 100.0
+  dynamic_weight_freq: 50
+  dynamic_weight_alpha: 0.2
+  softmax_beta: 20.0
+  softmax_anneal: true
+  softmax_rho: 0.01
+  num_generations: 20000
+  outlier_retraining: true
+  outlier_N_new: 200
+  outlier_delta_fraction: 0.15
+  outlier_seed: 42
+  outlier_max_iter: 5
+  outlier_target_fraction: 0.5
+  outlier_sample_mode: dm_global
+  outlier_method: sobol
+  outlier_uns_cap: 256
+  outlier_shuffle_factor: 2
+  Weights:
+    Tig: 1.0
+
+# ──────────────────────────────────────────────────────────────────────────
+# SECTION 2 — RMIP Multi-Mechanism Analysis
+# ──────────────────────────────────────────────────────────────────────────
+RMIP:
+  database: project.db
+  glossary: species_smiles.csv
+  mechanisms:
+  - name: Glarborg_2018
+    path: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/GLARBORG_2018/GLARBORG_2018.inp
+    format: chemkin
+    thermo: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/GLARBORG_2018/GLARBORG_2018_thermo.dat
+    trans: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/GLARBORG_2018/GLARBORG_2018_trans.dat
+  - name: Konnov_2019
+    path: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/KONNOV_2019_AMMONIA_HYDROGEN/128-957.inp
+    format: chemkin
+    thermo: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/KONNOV_2019_AMMONIA_HYDROGEN/128-957.dat
+    trans: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/KONNOV_2019_AMMONIA_HYDROGEN/128-957.tran
+  - name: Grabriel_2022
+    path: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/GABRIEL_2022_AMMONIA_HYDROGEN/Mechanism
+      Files/Gas-Phase-Kinetics_Detailed.inp
+    format: chemkin
+    thermo: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/GABRIEL_2022_AMMONIA_HYDROGEN/Mechanism
+      Files/Thermodynamics_Detailed.dat
+    trans: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/GABRIEL_2022_AMMONIA_HYDROGEN/Mechanism
+      Files/Transport_Detailed.dat
+  - name: Sarathy_2021
+    path: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/SARATHY_2021_AMMONIA_HYDROGEN/SMM3_Reaction
+      mechanism.inp
+    format: chemkin
+    thermo: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/SARATHY_2021_AMMONIA_HYDROGEN/SMM4_Thermodynamic
+      data.dat
+    trans: /data/MECHANISM_OPTIMIZATION_SUITE/MECHANISM/SARATHY_2021_AMMONIA_HYDROGEN/SMM5_Transport
+      data.dat
+  graph:
+    layout: spring
+    out_dir: outputs/graphs
+    export_graphml: true
+    export_figure: true
+    figure_format: png
+  graph3d:
+    shell_gap: 2.0
+    layer_gap: 1.0
+    order: alpha
+    out_dir: outputs/graphs/3d
+  comparison:
+    tol_A: 0.01
+    tol_n: 0.001
+    tol_Ea: 100.0
+    out_dir: outputs/comparison
+  fusion:
+    name: Fused_Mech
+    description: ''
+    uf_warn: 10.0
+    out_dir: outputs/fusion
+  benchmarking:
+    sim_type: IDT
+    tol_T: 20.0
+    tol_P: 0.5
+    tol_phi: 0.05
+    out_dir: outputs/benchmarking
+  reduction:
+    method: DRG
+    target_species: H2,O2,H2O
+    eps_max: 0.5
+    T: 1200.0
+    P: 1.0
+    phi: 1.0
+    sa_json: null
+    out_dir: outputs/reduction
+    target_file: null
+  sa_analysis:
+    fuel: H2
+    T: 1200.0
+    P: 1.0
+    phi: 1.0
+    out_dir: outputs/sa
+  unified_tree:
+    mode: anchored
+    anchor_mechanism: Mech1
+    T_min: 500
+    T_max: 2500
+    dT: 20
+    P_ref_atm: 1.0
+    use_cantera_for_falloff: false
+    out_dir: outputs/unified
+  export:
+    chemkin_path: outputs/export/mechanism.inp
+    yaml_path: outputs/export/mechanism.yaml
+    embed_uncertainty: true
+  mech_workflow: one_at_a_time
+
+# ──────────────────────────────────────────────────────────────────────────
+# SECTION 3 — Forward UQ Settings
+# ──────────────────────────────────────────────────────────────────────────
+ForwardUQ:
+  n_samples: 50000
+  method: sobol
+  output_dir: outputs/forward_uq
+  plot_histogram: true
+  plot_sobol: true
+  ci_level: 0.95

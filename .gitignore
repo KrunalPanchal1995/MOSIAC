@@ -1,0 +1,67 @@
+# Large reference/vendored data — not source, tracked outside git for now.
+# See MarkDownFiles/PLAN.md for the rationale (this repo was init'd purely to
+# make src/ cleanup reversible, not to version large binary/reference data).
+DATASET/
+PyChemkin-master/
+MECHANISM/
+outputs/
+xml_output/
+
+# Caches / generated
+__pycache__/
+*.pyc
+.pytest_cache/
+.codegraph/
+.rmip_cantera_cache/
+docs/_build/
+
+# Dedicated venvs (bridged via subprocess, never imported directly — see
+# feedback_env_isolation memory doc)
+.venv-gui/
+
+# Transient runtime / session state
+project.db-shm
+project.db-wal
+.rmip_gui_autosave.json
+
+# Phase 4 pause/resume: git-worktree checkouts for "pause a run, edit the
+# source, resume with the change" (mso_workbench.git_pause). Each is a
+# second working directory checked out onto its own mso-pause/* branch --
+# the branch itself is real repo history, only the checkout is disposable.
+.mso_pause_worktrees/
+tmp*_target.opt
+
+# Session/campaign test-run output and GUI runtime state — not source. The
+# few reviewable artifacts worth keeping long-term get promoted into git
+# elsewhere (e.g. bug.md write-ups, src/rmip/tests/fixtures/) rather than
+# committing the whole directory. See bug.md 2026-08-04 note.
+Test_run_23_JULY/
+.gui_settings/
+SIM_RUNS/*/
+
+# MUQ-SAC / Sensitivity_Analysis pipeline scratch output — these scripts
+# (src/MUQ-SAC/run_script.py, src/Sensitivity_Analysis/sens*.py, and ~20
+# siblings) write directly to CWD-relative paths by long-standing design;
+# running any of them from the repo root regenerates these. Not source,
+# not meant to be committed (see MarkDownFiles/AMMONIA_CAMPAIGN_2026-07-22.md
+# Phase 6 for an example run that produced them).
+DM_FOR_PARTIAL_PRS/
+YAML_FILES_FOR_PARTIAL_PRS/
+sa_pipeline_v2_out/
+Plots_SA/
+ACTIVE_RXN_INDEX.csv
+ACTIVE_RXN_LIST.csv
+RXN_DICT.pkl
+Reaction_dict.txt
+Reaction_type.txt
+selected_rxn.txt
+sens_parameters.pkl
+target_data.txt
+
+# ReactionFamilyKB._call()'s default work_dir for the RMG-backend subprocess
+# bridge (rmg_{cmd}_request/response.json) — regenerated on every family-scan
+# / generate_targeted call, not source.
+rmg_gen/
+
+# Machine-local Claude Code permissions — not shared config.
+.claude/settings.local.json

@@ -1,0 +1,9 @@
+sphinx
+furo
+PySide6
+matplotlib
+jinja2
+platformdirs
+pyyaml
+numpy
+scipy
