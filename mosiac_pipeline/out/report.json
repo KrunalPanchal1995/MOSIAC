@@ -1,0 +1,239 @@
+{
+  "construct": {
+    "source": "h2o2.yaml",
+    "species": [
+      "H2",
+      "H",
+      "O",
+      "O2",
+      "OH",
+      "H2O",
+      "HO2",
+      "H2O2",
+      "AR",
+      "N2"
+    ],
+    "n_reactions": 29,
+    "elements": [
+      "O",
+      "H",
+      "Ar",
+      "N"
+    ],
+    "element_imbalance_max": 0.0
+  },
+  "explain": {
+    "condition": {
+      "T0": 1100.0,
+      "phi": 1.0,
+      "tau_s": 8.895628212648226e-05
+    },
+    "top": [
+      {
+        "index": 10,
+        "reaction": "H + O2 <=> O + OH",
+        "dln_tau_dln_k": -0.9439078906967628
+      },
+      {
+        "index": 2,
+        "reaction": "H2 + O <=> H + OH",
+        "dln_tau_dln_k": -0.1513779163670707
+      },
+      {
+        "index": 8,
+        "reaction": "H + O2 + N2 <=> HO2 + N2",
+        "dln_tau_dln_k": 0.12463045453366303
+      },
+      {
+        "index": 5,
+        "reaction": "H + O2 + M <=> HO2 + M",
+        "dln_tau_dln_k": 0.10258509129828729
+      },
+      {
+        "index": 20,
+        "reaction": "H2 + OH <=> H + H2O",
+        "dln_tau_dln_k": -0.05083255318591253
+      },
+      {
+        "index": 17,
+        "reaction": "H + HO2 <=> 2 OH",
+        "dln_tau_dln_k": -0.03704300757893719
+      }
+    ]
+  },
+  "calibrate": {
+    "calibrated_reactions": [
+      "H + O2 <=> O + OH",
+      "H2 + O <=> H + OH",
+      "H + O2 + N2 <=> HO2 + N2",
+      "H + O2 + M <=> HO2 + M"
+    ],
+    "truth_multipliers": [
+      1.4190675485932571,
+      0.7408182206817179,
+      1.2840254166877414,
+      0.8187307530779818
+    ],
+    "recovered_multipliers": [
+      1.4190681990265195,
+      0.7408180731144287,
+      1.2840269284064056,
+      0.818731335991292
+    ],
+    "rms_log_error_before": 0.2891431894305058,
+    "rms_log_error_after": 4.316807257803337e-07,
+    "note": "synthetic twin experiment; multipliers of correlated reactions need not be recovered individually"
+  },
+  "reduce": {
+    "kept": [
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      10,
+      11,
+      13,
+      14,
+      16,
+      17,
+      20,
+      21
+    ],
+    "dropped": [
+      "2 O + M <=> O2 + M",
+      "H + O + M <=> OH + M",
+      "H2O2 + O <=> HO2 + OH",
+      "H + O2 + AR <=> HO2 + AR",
+      "2 H + H2 <=> H2 + H2",
+      "H + HO2 <=> H2O + O",
+      "H + H2O2 <=> H2 + HO2",
+      "H + H2O2 <=> H2O + OH",
+      "2 OH <=> H2O + O",
+      "HO2 + OH <=> H2O + O2",
+      "H2O2 + OH <=> H2O + HO2",
+      "H2O2 + OH <=> H2O + HO2",
+      "2 HO2 <=> H2O2 + O2",
+      "2 HO2 <=> H2O2 + O2",
+      "HO2 + OH <=> H2O + O2"
+    ],
+    "n_full": 29,
+    "n_reduced": 14,
+    "max_rel_delay_error": 0.012186439126848247,
+    "tolerance": 0.03
+  },
+  "cfd": {
+    "case": {
+      "name": "held-out",
+      "T_bg": 1000.0,
+      "T_hot": 1500.0,
+      "width_m": 0.0012,
+      "phi": 1.0,
+      "length_m": 0.02,
+      "n_cells": 100,
+      "dt": 1e-05,
+      "t_end": 0.001,
+      "P": 101325.0
+    },
+    "reduced_vs_full": {
+      "t50_ms": 0.2,
+      "t95_ms": 0.2,
+      "T_mean_final_K": 2710.2859921334452,
+      "final_T_profile_rel_L2": 0.0003936439655352032,
+      "final_H2O_profile_rel_L2": 0.0003805610055075267,
+      "mean_T_trace_rms_K": 20.09755649436929,
+      "element_drift_max_rel": 1.0789417412579835e-13,
+      "chemistry_seconds": 2.8455078169645276,
+      "chemistry_speedup_vs_reference": 1.2676343679733395
+    },
+    "full": {
+      "t50_ms": 0.2,
+      "t95_ms": 0.2,
+      "chemistry_seconds": 3.607063503121026
+    }
+  },
+  "surrogate": {
+    "training_start_states": 3600,
+    "rollout_steps": 12,
+    "parameters": 9545,
+    "training_cases": [
+      "train-A",
+      "train-B",
+      "train-C",
+      "train-D",
+      "train-E"
+    ],
+    "test_case": "held-out",
+    "ablation": [
+      {
+        "t50_ms": 0.1,
+        "t95_ms": 0.1,
+        "T_mean_final_K": 2688.018268712757,
+        "final_T_profile_rel_L2": 0.010239718920596379,
+        "final_H2O_profile_rel_L2": 0.014259419378346223,
+        "mean_T_trace_rms_K": 263.42127771798357,
+        "element_drift_max_rel": 0.007919276128680144,
+        "chemistry_seconds": 0.17914313395158388,
+        "chemistry_speedup_vs_reference": 20.135092110735815,
+        "variant": "V1 one-step, linear state, mass-renormalised",
+        "training_seconds": 99.5568360289908,
+        "final_train_loss": 0.05953701213002205,
+        "final_val_loss": 0.028281623497605324,
+        "fallback_cell_fraction": null
+      },
+      {
+        "t50_ms": 0.25,
+        "t95_ms": 0.25,
+        "T_mean_final_K": 2654.7539913595583,
+        "final_T_profile_rel_L2": 0.03459153740019719,
+        "final_H2O_profile_rel_L2": 0.03212861743270252,
+        "mean_T_trace_rms_K": 185.88597453511517,
+        "element_drift_max_rel": 0.04410367600303203,
+        "chemistry_seconds": 0.18821867406950332,
+        "chemistry_speedup_vs_reference": 19.16421694581192,
+        "variant": "V2 one-step, radicals in log10",
+        "training_seconds": 97.21364809302031,
+        "final_train_loss": 0.017537295818328857,
+        "final_val_loss": 0.014332514256238937,
+        "fallback_cell_fraction": null
+      },
+      {
+        "t50_ms": 0.04,
+        "t95_ms": 0.05,
+        "T_mean_final_K": 2781.2304881833206,
+        "final_T_profile_rel_L2": 0.09955846012691999,
+        "final_H2O_profile_rel_L2": 0.14679489497347395,
+        "mean_T_trace_rms_K": 427.09592106344166,
+        "element_drift_max_rel": 0.15244350172204854,
+        "chemistry_seconds": 1.1906513889261987,
+        "chemistry_speedup_vs_reference": 3.0294875029491997,
+        "variant": "V3 V2 + element projection, enthalpy T, fallback",
+        "training_seconds": 97.31034390002606,
+        "final_train_loss": 0.017537295818328857,
+        "final_val_loss": 0.014332514256238937,
+        "fallback_cell_fraction": 0.06292585170340681
+      },
+      {
+        "t50_ms": 0.13,
+        "t95_ms": 0.13,
+        "T_mean_final_K": 2447.904346995892,
+        "final_T_profile_rel_L2": 0.09900944015868954,
+        "final_H2O_profile_rel_L2": 0.12712715406719022,
+        "mean_T_trace_rms_K": 258.44215758270553,
+        "element_drift_max_rel": 0.11403722834868356,
+        "chemistry_seconds": 0.3430293822020758,
+        "chemistry_speedup_vs_reference": 10.515319358258747,
+        "variant": "V4 V3 trained on 12-step rollouts",
+        "training_seconds": 394.094906548009,
+        "final_train_loss": 0.5735733509063721,
+        "final_val_loss": 0.6541528105735779,
+        "fallback_cell_fraction": 0.0078
+      }
+    ],
+    "best_variant": "V2 one-step, radicals in log10",
+    "reference_integrator_failures": 0,
+    "selection_rule": "lowest RMS error of the domain-mean temperature trace against the full-mechanism CFD"
+  },
+  "total_seconds": 717.0216456880153
+}
