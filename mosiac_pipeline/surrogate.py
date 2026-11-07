@@ -58,7 +58,7 @@ def flow(f: nn.Module, x0: torch.Tensor, n_steps: int = 4) -> torch.Tensor:
 
 
 class Surrogate:
-    def __init__(self, species: list[str], dt: float, gas=None, P: float = 101325.0, fallback=None, log_radicals: bool = True):
+    def __init__(self, species: list[str], dt: float, gas=None, P: float = 101325.0, fallback=None, log_radicals: bool = True, closure_gas=None):
         """gas: mechanism whose species/thermo the surrogate is consistent with (enables conservation projection);
         fallback: a chemistry operator (e.g. CanteraChemistry) used for any cell where the surrogate's output cannot
         be made thermodynamically consistent.  Counters n_cells / n_fallback report how often that happens."""
@@ -69,6 +69,17 @@ class Surrogate:
         self.n_fallback = 0
         self.gas = None
         self.E = None
+        # burned-gas closure: cells whose fuel is consumed are advanced to chemical equilibrium (constant enthalpy and
+        # pressure) instead of by the network, which has no restoring force and drifts there. Results are cached because
+        # burned cells in a uniform region share almost the same (enthalpy, element) key.
+        self.closure = None
+        self.n_closure = 0
+        self._eq_cache = {}
+        if closure_gas is not None:
+            self.closure = ct.Solution(thermo="ideal-gas", kinetics="gas", species=closure_gas.species(), reactions=[])
+            self._h2 = species.index("H2")
+            self._H = [self.closure.n_atoms(k, self.closure.element_index("H")) * self.closure.atomic_weights[self.closure.element_index("H")]
+                       / self.closure.molecular_weights[k] for k in range(self.closure.n_species)]
         if gas is not None:
             # private thermo-only phase, so enthalpy solves never disturb a reactor that shares `gas`
             self.gas = ct.Solution(thermo="ideal-gas", kinetics="gas", species=gas.species(), reactions=[])
@@ -191,6 +202,21 @@ class Surrogate:
         assert abs(dt - self.dt) < 1e-12, "surrogate was trained for a fixed CFD time step"
         Y2, T2 = Y.copy(), T.copy()
         act = np.nonzero(T >= T_ACTIVE)[0]
+        if self.closure is not None and act.size:
+            burned = act[(T[act] >= 2000.0) & (Y[act, self._h2] < 0.02)]
+            for i in burned:
+                g = self.closure
+                g.TPY = float(T[i]), self.P, Y[i]
+                h0 = g.enthalpy_mass
+                key = (round(h0 / 2.0e3), round(float(np.dot(self._H, Y[i])) * 1e4))
+                hit = self._eq_cache.get(key)
+                if hit is None:
+                    g.equilibrate("HP")
+                    hit = (g.Y.copy(), g.T)
+                    self._eq_cache[key] = hit
+                Y2[i], T2[i] = hit
+            self.n_closure += len(burned)
+            act = np.setdiff1d(act, burned, assume_unique=True)
         if act.size == 0:
             return Y2, T2
         x = self.pack(Y[act], T[act])
@@ -237,6 +263,15 @@ class Surrogate:
         else:
             T2[act] = np.clip(out[:, -1], 200.0, 4000.0)
         return Y2, T2
+
+    @classmethod
+    def load(cls, path: str, gas=None, closure_gas=None, fallback=None) -> "Surrogate":
+        ck = torch.load(path, weights_only=False)
+        sur = cls(ck["species"], ck["dt"], gas=gas, fallback=fallback, closure_gas=closure_gas)
+        sur.f.load_state_dict(ck["f"])
+        sur.lo, sur.hi = ck["lo"], ck["hi"]
+        sur.log_mask = np.asarray(ck["log_mask"])
+        return sur
 
     def save(self, path: str) -> None:
         torch.save({"f": self.f.state_dict(), "lo": self.lo, "hi": self.hi, "species": self.species, "dt": self.dt,

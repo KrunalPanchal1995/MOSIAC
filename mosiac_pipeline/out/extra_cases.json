@@ -1,0 +1,47 @@
+[
+  {
+    "t50_ms": 0.1,
+    "t95_ms": 0.1,
+    "T_mean_final_K": 2711.9074691312712,
+    "final_T_profile_rel_L2": 0.013652792213752039,
+    "final_H2O_profile_rel_L2": 0.011188185532928248,
+    "mean_T_trace_rms_K": 94.51920862705221,
+    "element_drift_max_rel": 0.004393192878639964,
+    "chemistry_seconds": 0.09391114182653837,
+    "chemistry_speedup_vs_reference": 22.365017210132162,
+    "case": "extra-1",
+    "T_bg": 1080.0,
+    "phi": 0.95,
+    "t50_reference_ms": 0.09000000000000001
+  },
+  {
+    "t50_ms": 0.36000000000000004,
+    "t95_ms": 0.36000000000000004,
+    "T_mean_final_K": 2747.236336618997,
+    "final_T_profile_rel_L2": 0.05862395720500857,
+    "final_H2O_profile_rel_L2": 0.07362580194938388,
+    "mean_T_trace_rms_K": 243.48212248059136,
+    "element_drift_max_rel": 0.04902421293127935,
+    "chemistry_seconds": 0.21417526199365966,
+    "chemistry_speedup_vs_reference": 13.740218905845058,
+    "case": "extra-2",
+    "T_bg": 960.0,
+    "phi": 1.1,
+    "t50_reference_ms": 0.31
+  },
+  {
+    "t50_ms": 0.16,
+    "t95_ms": 0.16,
+    "T_mean_final_K": 2706.9260249995086,
+    "final_T_profile_rel_L2": 0.03396726333227932,
+    "final_H2O_profile_rel_L2": 0.01615667692370154,
+    "mean_T_trace_rms_K": 116.73376659063727,
+    "element_drift_max_rel": 0.01505823462324205,
+    "chemistry_seconds": 0.10882126208161935,
+    "chemistry_speedup_vs_reference": 20.92797321493594,
+    "case": "extra-3",
+    "T_bg": 1020.0,
+    "phi": 0.85,
+    "t50_reference_ms": 0.15000000000000002
+  }
+]

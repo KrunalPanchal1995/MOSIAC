@@ -56,6 +56,7 @@ def main(argv=None) -> dict:
     ap.add_argument("--out", default=str(Path(__file__).parent / "out"))
     ap.add_argument("--steps", type=int, default=4000, help="one-step surrogate training steps")
     ap.add_argument("--rollout-steps", type=int, default=2500, help="rollout surrogate training steps")
+    ap.add_argument("--only", default="", help="comma-separated variant ids to run, e.g. V5,V6")
     ap.add_argument("--skip-rollout", action="store_true", help="skip the (slow) rollout-trained variant")
     ap.add_argument("--mechanism", default="h2o2.yaml")
     a = ap.parse_args(argv)
@@ -121,12 +122,19 @@ def main(argv=None) -> dict:
     ]
     if not a.skip_rollout:
         variants.append((f"V4 V3 trained on {K}-step rollouts", dict(log_radicals=True, constrained=True, rollout=True)))
+    variants.append(("V5 V2 + burned-gas equilibrium closure", dict(log_radicals=True, constrained=False, rollout=False, closure=True)))
+    if not a.skip_rollout:
+        variants.append((f"V6 {K}-step rollouts, log radicals + burned-gas closure", dict(log_radicals=True, constrained=False, rollout=True, closure=True)))
+    if a.only:
+        wanted = tuple(a.only.split(","))
+        variants = [v for v in variants if v[0].split()[0] in wanted]
     seq = None
     ablation, best = [], None
     for name, opt in variants:
         print(f"      variant {name}")
         sur = Surrogate(species, TEST_CASE.dt, gas=reduced if opt["constrained"] else None,
-                        fallback=C.CanteraChemistry(reduced) if opt["constrained"] else None, log_radicals=opt["log_radicals"])
+                        fallback=C.CanteraChemistry(reduced) if opt["constrained"] else None, log_radicals=opt["log_radicals"],
+                        closure_gas=reduced if opt.get("closure") else None)
         t0 = time.perf_counter()
         if opt["rollout"]:
             if seq is None:
@@ -138,7 +146,8 @@ def main(argv=None) -> dict:
         sres = C.run(TEST_CASE, sur, reduced)
         m = compare(ref, sres, gas)
         m.update({"variant": name, "training_seconds": train_s, "final_train_loss": hist["train"][-1], "final_val_loss": hist["val"][-1],
-                  "fallback_cell_fraction": sur.n_fallback / max(sur.n_cells, 1) if opt["constrained"] else None})
+                  "fallback_cell_fraction": sur.n_fallback / max(sur.n_cells, 1) if opt["constrained"] else None,
+                  "closure_cell_steps": sur.n_closure})
         ablation.append(m)
         print(f"         t50 {m['t50_ms']:.3f} ms (full {rep['cfd']['full']['t50_ms']:.3f}) | final-T err {m['final_T_profile_rel_L2']*100:.1f}% | "
               f"mean-T trace RMS {m['mean_T_trace_rms_K']:.0f} K | element drift {m['element_drift_max_rel']*100:.1f}% | "

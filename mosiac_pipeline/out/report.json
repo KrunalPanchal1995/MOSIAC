@@ -229,11 +229,93 @@
         "final_train_loss": 0.5735733509063721,
         "final_val_loss": 0.6541528105735779,
         "fallback_cell_fraction": 0.0078
+      },
+      {
+        "t50_ms": 0.2,
+        "t95_ms": 0.2,
+        "T_mean_final_K": 2733.0519212155887,
+        "final_T_profile_rel_L2": 0.028052720509184663,
+        "final_H2O_profile_rel_L2": 0.04091325278694759,
+        "mean_T_trace_rms_K": 85.42049548991348,
+        "element_drift_max_rel": 0.030277637535968547,
+        "chemistry_seconds": 0.1342759919934906,
+        "chemistry_speedup_vs_reference": 21.13681413075471,
+        "variant": "V5 V2 + burned-gas equilibrium closure",
+        "training_seconds": 95.0537941030052,
+        "final_train_loss": 0.020555175840854645,
+        "final_val_loss": 0.017075125128030777,
+        "fallback_cell_fraction": null,
+        "closure_cell_steps": 8242
+      },
+      {
+        "t50_ms": 0.6100000000000001,
+        "t95_ms": NaN,
+        "T_mean_final_K": 2397.572270843124,
+        "final_T_profile_rel_L2": 0.3179732949827517,
+        "final_H2O_profile_rel_L2": 0.5495493140470601,
+        "mean_T_trace_rms_K": 718.9652091281912,
+        "element_drift_max_rel": 0.268378082227808,
+        "chemistry_seconds": 0.34716293221572414,
+        "chemistry_speedup_vs_reference": 8.250664913752074,
+        "variant": "V6 12-step rollouts, log radicals + burned-gas closure",
+        "training_seconds": 386.439845062996,
+        "final_train_loss": 0.5730778574943542,
+        "final_val_loss": 0.6634407639503479,
+        "fallback_cell_fraction": null,
+        "closure_cell_steps": 4368
       }
     ],
-    "best_variant": "V2 one-step, radicals in log10",
+    "best_variant": "V5 V2 + burned-gas equilibrium closure",
     "reference_integrator_failures": 0,
-    "selection_rule": "lowest RMS error of the domain-mean temperature trace against the full-mechanism CFD"
+    "selection_rule": "lowest RMS error of the domain-mean temperature trace against the full-mechanism CFD",
+    "extra_cases": [
+      {
+        "t50_ms": 0.1,
+        "t95_ms": 0.1,
+        "T_mean_final_K": 2711.9074691312712,
+        "final_T_profile_rel_L2": 0.013652792213752039,
+        "final_H2O_profile_rel_L2": 0.011188185532928248,
+        "mean_T_trace_rms_K": 94.51920862705221,
+        "element_drift_max_rel": 0.004393192878639964,
+        "chemistry_seconds": 0.09391114182653837,
+        "chemistry_speedup_vs_reference": 22.365017210132162,
+        "case": "extra-1",
+        "T_bg": 1080.0,
+        "phi": 0.95,
+        "t50_reference_ms": 0.09000000000000001
+      },
+      {
+        "t50_ms": 0.36000000000000004,
+        "t95_ms": 0.36000000000000004,
+        "T_mean_final_K": 2747.236336618997,
+        "final_T_profile_rel_L2": 0.05862395720500857,
+        "final_H2O_profile_rel_L2": 0.07362580194938388,
+        "mean_T_trace_rms_K": 243.48212248059136,
+        "element_drift_max_rel": 0.04902421293127935,
+        "chemistry_seconds": 0.21417526199365966,
+        "chemistry_speedup_vs_reference": 13.740218905845058,
+        "case": "extra-2",
+        "T_bg": 960.0,
+        "phi": 1.1,
+        "t50_reference_ms": 0.31
+      },
+      {
+        "t50_ms": 0.16,
+        "t95_ms": 0.16,
+        "T_mean_final_K": 2706.9260249995086,
+        "final_T_profile_rel_L2": 0.03396726333227932,
+        "final_H2O_profile_rel_L2": 0.01615667692370154,
+        "mean_T_trace_rms_K": 116.73376659063727,
+        "element_drift_max_rel": 0.01505823462324205,
+        "chemistry_seconds": 0.10882126208161935,
+        "chemistry_speedup_vs_reference": 20.92797321493594,
+        "case": "extra-3",
+        "T_bg": 1020.0,
+        "phi": 0.85,
+        "t50_reference_ms": 0.15000000000000002
+      }
+    ],
+    "note": "V1-V4 from one run, V5 and V6 from later runs with the same seeds, data and test case; extra_cases are three further unseen configurations for the selected variant"
   },
   "total_seconds": 717.0216456880153
 }
