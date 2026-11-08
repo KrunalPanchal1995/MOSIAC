@@ -1,5 +1,9 @@
 # mosiac_pipeline: the whole loop, once, on H2/air
 
+**Why this exists.** Developing a reacting process is one loop: know the chemistry, find out what controls the result, calibrate against measurements, quantify how sure you are, reduce the model to what matters, simulate the process, and then build something faster from what you learned. MOSIAC's modules each own one step; this folder runs the loop end to end on a small, public problem so the steps can be seen working together. The same loop applies to any reactor, plasma-etch chemistry included.
+
+**Status: research in progress.** Stages 1-5 are working demonstrations. Stage 6, a Neural-ODE surrogate for the chemistry running inside a CFD solver, is a first result whose accuracy is still being improved; it is not a validated model. The "CFD" is a small 1-D solver written for this demo, and calibration uses a synthetic twin, not experimental data. Limits and open items are listed below.
+
 A small, runnable demonstration that takes a reaction mechanism through every stage of the MOSIAC story and uses it in a
 CFD run, with a Neural-ODE surrogate standing in for the chemistry inside that same CFD.
 
